@@ -1,17 +1,39 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { SpaceService } from './space.service';
-import { CreateSpaceDto } from './dto/create-space.dto';
+import { CreateSpaceDto, JoinSpaceDto } from './dto/create-space.dto';
 import { UpdateSpaceDto } from './dto/update-space.dto';
+import { GetUser } from '@/decorator/get-user.decorator';
 
 @Controller('space')
 export class SpaceController {
   constructor(private readonly spaceService: SpaceService) {}
 
-  @Post()
-  create(@Body() createSpaceDto: CreateSpaceDto) {
-    return this.spaceService.create(createSpaceDto);
+  @Post('create')
+  createSpace(@Body() dto: CreateSpaceDto, @GetUser('_id') userId: string) {
+    console.log('first', userId);
+    return this.spaceService.createSpace(dto, userId);
+  }
+  @Post('join')
+  @HttpCode(HttpStatus.OK)
+  joinSpace(@Body() dto: JoinSpaceDto, @GetUser('_id') userId: string) {
+    return this.spaceService.joinSpace(dto, userId);
   }
 
+  @Get('me')
+  @HttpCode(HttpStatus.OK)
+  getMySpace(@GetUser('spaceId') spaceId: string) {
+    return this.spaceService.getMySpace(spaceId);
+  }
   @Get()
   findAll() {
     return this.spaceService.findAll();

@@ -31,7 +31,7 @@ const LoginPage = () => {
       return;
     }
     setError("");
-    setLoading(true);
+    setLoading(true); 
     try {
       const res = await loginAction(email.trim().toLowerCase(), password);
 
