@@ -19,14 +19,22 @@ export class SpaceController {
   constructor(private readonly spaceService: SpaceService) {}
 
   @Post('create')
-  createSpace(@Body() dto: CreateSpaceDto, @GetUser('_id') userId: string) {
-    console.log('first', userId);
-    return this.spaceService.createSpace(dto, userId);
+  createSpace(
+    @Body() dto: CreateSpaceDto,
+    @GetUser('_id') userId: string,
+    @GetUser('accountId') accountId: string,
+    @GetUser('username') email: string,
+  ) {
+    return this.spaceService.createSpace(dto, userId, accountId, email);
   }
   @Post('join')
-  @HttpCode(HttpStatus.OK)
-  joinSpace(@Body() dto: JoinSpaceDto, @GetUser('_id') userId: string) {
-    return this.spaceService.joinSpace(dto, userId);
+  joinSpace(
+    @Body() dto: JoinSpaceDto,
+    @GetUser('_id') userId: string,
+    @GetUser('accountId') accountId: string,
+    @GetUser('username') email: string,
+  ) {
+    return this.spaceService.joinSpace(dto, userId, accountId, email);
   }
 
   @Get('me')
@@ -34,23 +42,37 @@ export class SpaceController {
   getMySpace(@GetUser('spaceId') spaceId: string) {
     return this.spaceService.getMySpace(spaceId);
   }
-  @Get()
-  findAll() {
-    return this.spaceService.findAll();
+
+  @Patch('me/members/:memberId/role')
+  changeMemberRole(
+    @Param('memberId') memberId: string,
+    @Body('role') newRole: 'parent' | 'member',
+    @GetUser('spaceId') spaceId: string,
+    @GetUser('_id') currentUserId: string,
+    @GetUser('role') role: string,
+  ) {
+    return this.spaceService.changeMemberRole(
+      memberId,
+      newRole,
+      spaceId,
+      currentUserId,
+      role,
+    );
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.spaceService.findOne(+id);
-  }
-
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateSpaceDto: UpdateSpaceDto) {
-    return this.spaceService.update(+id, updateSpaceDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.spaceService.remove(+id);
+  // DELETE /spaces/me/members/:memberId
+  @Delete('me/members/:memberId')
+  removeMember(
+    @Param('memberId') memberId: string,
+    @GetUser('spaceId') spaceId: string,
+    @GetUser('_id') currentUserId: string,
+    @GetUser('role') role: string,
+  ) {
+    return this.spaceService.removeMember(
+      memberId,
+      spaceId,
+      currentUserId,
+      role,
+    );
   }
 }

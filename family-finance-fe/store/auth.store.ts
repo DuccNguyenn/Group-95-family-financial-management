@@ -1,40 +1,42 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 interface AuthState {
   user: IUser | null;
   token: string | null;
-
-  // Lưu sau khi login thành công
   setAuth: (user: IUser, token: string) => void;
-
-  // Cập nhật user (sau đổi profile)
   setUser: (user: Partial<IUser>) => void;
-
-  // Đăng xuất
   clear: () => void;
 }
 
-export const useAuthStore = create<AuthState>()((set, get) => ({
-  user: null,
-  token: null,
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set, get) => ({
+      user: null,
+      token: null,
 
-  setAuth: (user, token) => {
-    set({ user, token });
-    if (typeof document !== "undefined") {
-      document.cookie = `token=${token};path=/;max-age=${60 * 60 * 24 * 7};SameSite=Lax`;
+      setAuth: (user, token) => {
+        set({ user, token });
+        if (typeof document !== "undefined") {
+          document.cookie = `token=${token};path=/;max-age=${60 * 60 * 24 * 7};SameSite=Lax`;
+        }
+      },
+
+      setUser: (partial) => {
+        const current = get().user;
+        if (!current) return;
+        set({ user: { ...current, ...partial } });
+      },
+
+      clear: () => {
+        set({ user: null, token: null });
+        if (typeof document !== "undefined") {
+          document.cookie = "token=;max-age=0;path=/";
+        }
+      },
+    }),
+    {
+      name: "auth-storage", // Tên key trong localStorage
     }
-  },
-
-  setUser: (partial) => {
-    const current = get().user;
-    if (!current) return;
-    set({ user: { ...current, ...partial } });
-  },
-
-  clear: () => {
-    set({ user: null, token: null });
-    if (typeof document !== "undefined") {
-      document.cookie = "token=;max-age=0;path=/";
-    }
-  },
-}));
+  )
+);

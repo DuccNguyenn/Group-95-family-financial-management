@@ -55,6 +55,7 @@ export class UsersService {
       accountId: account._id,
       email: account.email,
       is_active: account.is_active,
+      sysRole: account.sysRole,
       // Từ User
       _id: user._id, // userId — dùng làm sub trong JWT
       name: user.name,

@@ -1,0 +1,865 @@
+# 📚 TÀI LIỆU DỰ ÁN — FAMILY FINANCIAL MANAGEMENT
+
+> **Dự án quản lý tài chính gia đình** — Cho phép nhiều thành viên trong một gia đình (Space) cùng theo dõi thu chi, ngân sách, và tài khoản chung.
+
+---
+
+## Mục Lục
+
+1. [Tổng Quan Dự Án (Overview)](#1-tổng-quan-dự-án-overview)
+2. [Luồng Xác Thực (Authentication Flow)](#2-luồng-xác-thực-authentication-flow)
+3. [Xử Lý State & Token ở Frontend](#3-xử-lý-state--token-ở-frontend)
+4. [Luồng Tạo "Không Gian" (Space Creation)](#4-luồng-tạo-không-gian-space-creation)
+5. [Tổng Hợp API Endpoints](#5-tổng-hợp-api-endpoints)
+
+---
+
+## 1. Tổng Quan Dự Án (Overview)
+
+### 1.1. Dự án này làm gì?
+
+**Family Financial Management** là ứng dụng web giúp các thành viên trong một gia đình cùng quản lý tài chính chung. Mỗi gia đình tạo một **"Space"** (phòng), mời các thành viên vào bằng **mã mời 6 ký tự**. Trong Space, mọi người có thể:
+
+- Ghi nhận **giao dịch thu/chi**
+- Đặt **ngân sách** hàng tháng
+- Theo dõi **tài khoản** tiền (ví, ngân hàng...)
+- Nhận **cảnh báo** khi chi tiêu vượt ngưỡng
+
+### 1.2. Kiến trúc tổng thể
+
+```mermaid
+graph TB
+    subgraph "Frontend — Next.js 15 (App Router)"
+        FE_Pages["Pages (Login, Register, Space, Dashboard...)"]
+        FE_Middleware["middleware.ts<br/>Bảo vệ route + kiểm tra JWT"]
+        FE_Actions["Server Actions (lib/action.ts)<br/>Gọi BE từ server-side"]
+        FE_API["API Helper (lib/api.ts)<br/>Gọi BE từ client-side"]
+        FE_Store["Zustand Store (store/auth.store.ts)<br/>Quản lý state user + token"]
+    end
+
+    subgraph "Backend — NestJS 11 + MongoDB"
+        BE_Auth["Auth Module<br/>(Login, Register, Verify)"]
+        BE_Users["Users Module<br/>(Profile, CRUD)"]
+        BE_Account["Account Module<br/>(Thông tin đăng nhập)"]
+        BE_Space["Space Module<br/>(Tạo/Join phòng gia đình)"]
+        BE_Transaction["Transaction Module<br/>(Giao dịch thu/chi)"]
+        BE_Budget["Budget Module<br/>(Ngân sách)"]
+        BE_DB[("MongoDB Atlas")]
+    end
+
+    FE_Pages --> FE_Actions
+    FE_Pages --> FE_API
+    FE_Actions --> BE_Auth
+    FE_Actions --> BE_Space
+    FE_API --> BE_Auth
+    FE_API --> BE_Users
+    BE_Auth --> BE_DB
+    BE_Users --> BE_DB
+    BE_Space --> BE_DB
+    BE_Transaction --> BE_DB
+    BE_Budget --> BE_DB
+    BE_Account --> BE_DB
+```
+
+### 1.3. Tech Stack
+
+| Layer      | Công nghệ                      |
+| ---------- | ------------------------------- |
+| Frontend   | Next.js 15 (App Router), React |
+| Styling    | Tailwind CSS                    |
+| State Mgmt | Zustand                         |
+| Backend    | NestJS 11                       |
+| Database   | MongoDB Atlas (qua Mongoose 9)  |
+| Auth       | Passport.js (Local + JWT)       |
+| Password   | bcrypt (10 salt rounds)         |
+| Email      | Nodemailer + Handlebars         |
+
+### 1.4. Cấu trúc thư mục cốt lõi
+
+```
+family-financial-management/
+├── family-finance-be/              ← Backend (NestJS)
+│   ├── src/
+│   │   ├── main.ts                 ← Entry point, port 8081, prefix /api
+│   │   ├── app.module.ts           ← Root module, kết nối MongoDB, cấu hình Mail
+│   │   ├── Module/
+│   │   │   ├── auths/              ← Xác thực (Login, Register, Verify)
+│   │   │   │   ├── auths.controller.ts
+│   │   │   │   ├── auths.service.ts
+│   │   │   │   ├── auths.module.ts
+│   │   │   │   ├── dto/
+│   │   │   │   │   └── create-auth.dto.ts
+│   │   │   │   └── passport/
+│   │   │   │       ├── jwt.strategy.ts       ← Xác thực JWT token
+│   │   │   │       ├── local.strategy.ts     ← Xác thực email/password
+│   │   │   │       ├── jwt-auth.guard.ts     ← Guard chặn request chưa có JWT
+│   │   │   │       └── local-auth.guard.ts
+│   │   │   ├── users/              ← Quản lý User (profile, CRUD)
+│   │   │   │   ├── schema/user.shcema.ts     ← Schema User (name, avatar, spaceId, role)
+│   │   │   │   ├── users.service.ts
+│   │   │   │   └── users.controller.ts
+│   │   │   ├── account/            ← Quản lý Account (email, password, kích hoạt)
+│   │   │   │   └── schema/account.schema.ts  ← Schema Account (email, passwordHash, code)
+│   │   │   ├── space/              ← Quản lý Space (phòng gia đình)
+│   │   │   │   ├── schema/space.schema.ts
+│   │   │   │   ├── space.service.ts
+│   │   │   │   └── space.controller.ts
+│   │   │   ├── transaction/        ← Giao dịch thu/chi
+│   │   │   └── budget/             ← Ngân sách
+│   │   ├── decorator/
+│   │   │   ├── customize.ts        ← @Public() decorator
+│   │   │   └── get-user.decorator.ts ← @GetUser() decorator
+│   │   └── helper/
+│   │       └── util.ts             ← hashPassword, comparePassword (bcrypt)
+│   └── .env                        ← MONGODB_URI, JWT_SECRET, MAIL_USER/PASS
+│
+├── family-finance-fe/              ← Frontend (Next.js)
+│   ├── app/
+│   │   ├── layout.tsx              ← Root layout
+│   │   ├── page.tsx                ← Trang chủ
+│   │   ├── (auth)/                 ← Route group Auth (không cần đăng nhập)
+│   │   │   ├── login/page.tsx
+│   │   │   ├── register/page.tsx
+│   │   │   ├── verify/page.tsx
+│   │   │   └── change-password/page.tsx
+│   │   ├── (main)/                 ← Route group chính (cần đăng nhập)
+│   │   │   ├── space/page.tsx      ← Tạo/Join Space
+│   │   │   └── layout.tsx
+│   │   └── onboarding/page.tsx     ← Giới thiệu cho user mới
+│   ├── middleware.ts               ← Bảo vệ route, redirect dựa trên JWT
+│   ├── lib/
+│   │   ├── action.ts               ← Server Actions (gọi BE từ server)
+│   │   ├── api.ts                  ← sendRequest (client) + sendRequestServer
+│   │   ├── helper.ts              ← formatVND, parseMessage, isError
+│   │   └── utils.ts
+│   ├── store/
+│   │   └── auth.store.ts           ← Zustand store (user + token)
+│   ├── components/
+│   │   ├── auth/                   ← Components cho Login/Register
+│   │   └── ui/                     ← UI components (Button, Input, Card...)
+│   └── types/
+│       └── index.d.ts              ← TypeScript types (IUser, IBackendRes, IRequest)
+```
+
+### 1.5. Mô hình dữ liệu (Database Schema)
+
+Dự án sử dụng **2 bảng chính cho User** (tách biệt thông tin đăng nhập và thông tin cá nhân):
+
+```mermaid
+erDiagram
+    Account ||--|| User : "1:1 (accountId)"
+    User }o--|| Space : "N:1 (spaceId)"
+    Space ||--|{ User : "1:N (membersId)"
+
+    Account {
+        ObjectId _id
+        string email "unique, lowercase"
+        string passwordHash "bcrypt"
+        boolean is_active "false khi mới tạo"
+        string code_verification "mã 6 số"
+        Date code_expired "hết hạn sau 5 phút"
+        Date createdAt
+        Date updatedAt
+    }
+
+    User {
+        ObjectId _id
+        ObjectId accountId "ref Account, unique"
+        string name
+        string avatar "default ảnh mặc định"
+        ObjectId spaceId "ref Space, null khi chưa vào phòng"
+        enum role "parent | member | null"
+        Date createdAt
+        Date updatedAt
+    }
+
+    Space {
+        ObjectId _id
+        string name
+        ObjectId[] membersId "ref User[]"
+        string invitedCode "6 ký tự, unique, uppercase"
+        number[] alertThresholds "default [80, 100]"
+        ObjectId createdBy "ref User"
+    }
+```
+
+> **Tại sao tách Account và User?**
+> - `Account` chứa thông tin nhạy cảm (email, password, mã kích hoạt).
+> - `User` chứa thông tin hiển thị (tên, avatar, vai trò trong Space).
+> - Giúp tách biệt logic xác thực với logic nghiệp vụ.
+
+---
+
+## 2. Luồng Xác Thực (Authentication Flow)
+
+### 2.1. Đăng Ký (Register)
+
+```mermaid
+sequenceDiagram
+    actor User as Người dùng
+    participant FE as Frontend (Register Page)
+    participant SA as Server Action (action.ts)
+    participant BE as Backend (AuthsController)
+    participant US as UsersService
+    participant DB as MongoDB
+    participant Mail as Email Service
+
+    User->>FE: Nhập name, email, password
+    FE->>FE: Validate (email format, password >= 6)
+    FE->>SA: registerAction({ name, email, password })
+    SA->>BE: POST /api/auths/register
+    BE->>US: handleRegister(dto)
+    US->>DB: Kiểm tra email đã tồn tại?
+    alt Email đã tồn tại
+        US-->>FE: ❌ BadRequest "Email đã tồn tại"
+    end
+    US->>US: hashPasswordHelper(password) [bcrypt, 10 rounds]
+    US->>US: Tạo mã 6 số ngẫu nhiên + expired = now + 5 phút
+    US->>DB: Tạo Account {email, passwordHash, is_active: false, code, expired}
+    US->>DB: Tạo User {accountId, name, spaceId: null, role: null}
+    US->>Mail: Gửi email có mã kích hoạt 6 số
+    US-->>FE: ✅ "Đăng ký thành công. Kiểm tra email."
+    FE->>FE: Redirect đến /verify?email=...
+```
+
+#### Code minh họa — Mã hóa mật khẩu
+
+> File: `family-finance-be/src/helper/util.ts`
+
+```typescript
+import * as bcrypt from 'bcrypt';
+const saltRounds = 10;
+
+export const hashPasswordHelper = async (plainPassword: string) => {
+  return await bcrypt.hash(plainPassword, saltRounds);
+};
+
+export const comparePasswordHelper = async (plainPassword: string, hashedPassword: string) => {
+  return await bcrypt.compare(plainPassword, hashedPassword);
+};
+```
+
+#### Code minh họa — Tạo Account + User khi đăng ký
+
+> File: `family-finance-be/src/Module/users/users.service.ts`
+
+```typescript
+async handleRegister(dto: CreateAuthDto) {
+  // 1. Kiểm tra email trùng
+  const exists = await this.isEmailExists(dto.email);
+  if (exists) throw new BadRequestException(`Email ${dto.email} đã tồn tại`);
+
+  // 2. Hash password
+  const passwordHash = await hashPasswordHelper(dto.password);
+
+  // 3. Tạo mã kích hoạt 6 số, hết hạn sau 5 phút
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const expired = dayjs().add(5, 'minutes').toDate();
+
+  // 4. Tạo Account (thông tin đăng nhập)
+  const account = await this.accountModel.create({
+    email: dto.email.toLowerCase(),
+    passwordHash,
+    is_active: false,
+    code_verification: code,
+    code_expired: expired,
+  });
+
+  // 5. Tạo User (thông tin cá nhân) — liên kết với Account
+  const user = await this.userModel.create({
+    accountId: account._id,
+    name: dto.name,
+    // spaceId + role = null → chưa vào phòng
+  });
+
+  // 6. Gửi email kích hoạt
+  await this.mailerService.sendMail({ ... });
+}
+```
+
+---
+
+### 2.2. Đăng Nhập (Login)
+
+```mermaid
+sequenceDiagram
+    actor User as Người dùng
+    participant FE as Frontend (LoginPage)
+    participant ZS as Zustand Store
+    participant SA as Server Action
+    participant BE as NestJS Controller
+    participant Guard as LocalAuthGuard
+    participant LS as LocalStrategy
+    participant AS as AuthsService
+    participant US as UsersService
+    participant DB as MongoDB
+    participant JWT as JwtService
+
+    User->>FE: Nhập email + password
+    FE->>SA: loginAction(email, password)
+    SA->>BE: POST /api/auths/login {email, password}
+
+    Note over BE,LS: Guard chạy TRƯỚC controller
+
+    BE->>Guard: LocalAuthGuard kích hoạt
+    Guard->>LS: validate(email, password)
+    LS->>AS: validateUser(email, password)
+    AS->>US: findAccountByEmail(email)
+    US->>DB: accountModel.findOne({email})
+    DB-->>US: Account document
+    AS->>AS: comparePasswordHelper(password, passwordHash)
+    alt Sai password
+        AS-->>LS: return null
+        LS-->>BE: ❌ UnauthorizedException
+    end
+    AS->>US: getFullProfile(accountId)
+    US->>DB: accountModel.findById + userModel.findOne
+    DB-->>US: Account + User
+    US-->>AS: Gộp thành fullProfile
+
+    LS->>LS: Kiểm tra is_active
+    alt Chưa kích hoạt
+        LS-->>BE: ❌ BadRequest "Chưa kích hoạt"
+    end
+    LS-->>Guard: return profile → gắn vào req.user
+
+    Note over BE,JWT: Controller nhận req.user
+
+    BE->>AS: login(req.user)
+    AS->>JWT: signAsync(payload)
+    Note right of JWT: payload = {sub, accountId,<br/>username, spaceId, role}
+    JWT-->>AS: access_token
+    AS-->>SA: {access_token, user: {...}}
+
+    Note over SA: Server Action set Cookie
+
+    SA->>SA: setTokenCookie(access_token)
+    SA-->>FE: Trả response cho client
+    FE->>ZS: setAuth(user, access_token)
+    FE->>FE: router.push (dashboard hoặc /space)
+```
+
+#### Code minh họa — Login tạo JWT
+
+> File: `family-finance-be/src/Module/auths/auths.service.ts`
+
+```typescript
+async login(profile: any) {
+  const payload = {
+    sub: profile._id,           // User._id
+    accountId: profile.accountId, // Account._id
+    username: profile.email,
+    spaceId: profile.spaceId ?? null,
+    role: profile.role ?? null,
+  };
+
+  return {
+    access_token: await this.jwtService.signAsync(payload),
+    user: {
+      _id: profile._id,
+      name: profile.name,
+      email: profile.email,
+      avatar: profile.avatar,
+      spaceId: profile.spaceId ?? null,
+      role: profile.role ?? null,
+    },
+  };
+}
+```
+
+---
+
+### 2.3. JWT & Cookie — Chi tiết cơ chế
+
+#### Nội dung bên trong JWT (payload)
+
+Khi BE ký một JWT token, payload chứa:
+
+```json
+{
+  "sub": "userId (User._id)",
+  "accountId": "accountId (Account._id)",
+  "username": "email@example.com",
+  "spaceId": "spaceId hoặc null",
+  "role": "parent | member | null",
+  "iat": 1711000000,
+  "exp": 1711604800
+}
+```
+
+#### Cách Server Action set Cookie
+
+> File: `family-finance-fe/lib/action.ts`
+
+```typescript
+const setTokenCookie = async (token: string) => {
+  (await cookies()).set("token", token, {
+    httpOnly: true,       // JS client không đọc được → bảo mật hơn
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 60 * 60 * 24 * 7,  // 7 ngày
+    path: "/",
+  });
+};
+
+// Trong loginAction:
+export const loginAction = async (email, password) => {
+  const res = await sendRequestServer({ ... });
+  if (res?.access_token) {
+    await setTokenCookie(res.access_token);  // ← Set cookie tại server
+  }
+  return res;
+};
+```
+
+> ⚠️ **Lưu ý:** Cookie được set ở **2 nơi**:
+> - **Server Action** (`action.ts`): Set `httpOnly` cookie qua `cookies().set()` — An toàn, JS phía client không đọc được.
+> - **Zustand Store** (`auth.store.ts`): Set cookie qua `document.cookie` — Để middleware (Edge Runtime) có thể đọc được token.
+
+#### Cách JwtAuthGuard bảo vệ BE routes
+
+> File: `family-finance-be/src/Module/auths/passport/jwt-auth.guard.ts`
+
+```typescript
+@Injectable()
+export class JwtAuthGuard extends AuthGuard('jwt') {
+  canActivate(context: ExecutionContext) {
+    // Kiểm tra route có @Public() không
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (isPublic) return true;  // Không cần token
+    return super.canActivate(context);  // Chạy JwtStrategy
+  }
+}
+```
+
+> **Guard này được đăng ký GLOBAL** trong `app.module.ts`:
+> ```typescript
+> providers: [
+>   { provide: APP_GUARD, useClass: JwtAuthGuard },
+> ]
+> ```
+> → Mọi route đều bắt buộc có JWT, **trừ** các route đánh dấu `@Public()`.
+
+---
+
+## 3. Xử Lý State & Token ở Frontend
+
+### 3.1. Kiến trúc tổng quan FE
+
+```mermaid
+graph LR
+    subgraph "Server Side (Next.js)"
+        MW["middleware.ts<br/>Edge Runtime"]
+        SA["Server Actions<br/>(lib/action.ts)"]
+        CK["cookies()"]
+    end
+
+    subgraph "Client Side (Browser)"
+        ZS["Zustand Store<br/>(auth.store.ts)"]
+        API["sendRequest<br/>(lib/api.ts)"]
+        DC["document.cookie"]
+        Pages["React Pages"]
+    end
+
+    MW -->|Đọc cookie 'token'| CK
+    SA -->|Set/Get cookie| CK
+    Pages -->|gọi action| SA
+    Pages -->|set/get state| ZS
+    ZS -->|set cookie| DC
+    API -->|đọc token| DC
+    API -->|gắn Authorization header| BE["Backend API"]
+```
+
+### 3.2. Zustand Store — Quản lý State
+
+> File: `family-finance-fe/store/auth.store.ts`
+
+```typescript
+import { create } from "zustand";
+
+interface AuthState {
+  user: IUser | null;
+  token: string | null;
+  setAuth: (user: IUser, token: string) => void;
+  setUser: (user: Partial<IUser>) => void;
+  clear: () => void;
+}
+
+export const useAuthStore = create<AuthState>()((set, get) => ({
+  user: null,
+  token: null,
+
+  // Gọi sau khi login/createSpace/joinSpace thành công
+  setAuth: (user, token) => {
+    set({ user, token });
+    // Đồng bộ token ra cookie (để middleware đọc được)
+    if (typeof document !== "undefined") {
+      document.cookie = `token=${token};path=/;max-age=${60 * 60 * 24 * 7};SameSite=Lax`;
+    }
+  },
+
+  // Cập nhật user (sau khi đổi profile)
+  setUser: (partial) => {
+    const current = get().user;
+    if (!current) return;
+    set({ user: { ...current, ...partial } });
+  },
+
+  // Đăng xuất
+  clear: () => {
+    set({ user: null, token: null });
+    if (typeof document !== "undefined") {
+      document.cookie = "token=;max-age=0;path=/";
+    }
+  },
+}));
+```
+
+#### Giải thích cách đồng bộ
+
+1. **Khi Login thành công:**
+   - `loginAction()` (Server Action) set **httpOnly cookie** → an toàn cho middleware.
+   - `setAuth()` (Zustand) set **document.cookie** → để `sendRequest()` (client-side) đọc được.
+   - Zustand lưu `user` + `token` vào memory → React components re-render.
+
+2. **Khi tải lại trang (F5):**
+   - Zustand state bị **reset về null** (không persist).
+   - Cookie vẫn còn → middleware vẫn bảo vệ route đúng.
+   - `sendRequest()` vẫn đọc được token từ `document.cookie`.
+
+### 3.3. Cách gọi API — Token đính kèm vào Request
+
+#### Client-side — `sendRequest()`
+
+> File: `family-finance-fe/lib/api.ts`
+
+```typescript
+// Helper lấy token từ cookie (client-side)
+const getTokenFromCookie = (): string | null => {
+  if (typeof window === "undefined") return null;
+  const match = document.cookie
+    .split(";")
+    .find((c) => c.trim().startsWith("token="));
+  return match ? match.split("=")[1] : null;
+};
+
+export const sendRequest = async <T>(props: IRequest): Promise<T> => {
+  const token = getTokenFromCookie();  // ← Tự động lấy token từ cookie
+
+  const options: RequestInit = {
+    method,
+    headers: new Headers({
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),  // ← Gắn header
+      ...headers,
+    }),
+    body: JSON.stringify(body),
+  };
+
+  return fetch(url, options).then(res => res.json());
+};
+```
+
+#### Server-side — `sendRequestServer()`
+
+> File: `family-finance-fe/lib/action.ts`
+
+```typescript
+// Helper lấy token phía server
+const getToken = async () => (await cookies()).get("token")?.value ?? "";
+
+// Ví dụ: tạo phòng
+export const createSpaceAction = async (name) => {
+  const res = await sendRequestServer({
+    url: `${BE}/space/create`,
+    method: "POST",
+    token: await getToken(),   // ← Lấy token từ httpOnly cookie
+    body: { name },
+  });
+  if (res?.access_token) setTokenCookie(res.access_token);
+  return res;
+};
+```
+
+> File: `lib/api.ts` — `sendRequestServer` nhận `token` làm tham số:
+> ```typescript
+> export const sendRequestServer = async <T>(props: IRequest & { token?: string }) => {
+>   const options = {
+>     headers: new Headers({
+>       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+>     }),
+>     body: JSON.stringify(body),
+>   };
+>   return fetch(url, options).then(res => res.json());
+> };
+> ```
+
+### 3.4. Middleware — Bảo vệ Route phía Frontend
+
+> File: `family-finance-fe/middleware.ts`
+
+```mermaid
+graph TD
+    Start["Request đến"] --> ReadCookie["Đọc cookie 'token'"]
+    ReadCookie --> CheckPath{Loại route?}
+
+    CheckPath -->|"/"| HasTokenRoot{Có token?}
+    HasTokenRoot -->|Không| RedirectOnboarding["→ /onboarding"]
+    HasTokenRoot -->|Có| Next1["Pass qua"]
+
+    CheckPath -->|Auth pages<br>/login, /register...| HasTokenAuth{Có token?}
+    HasTokenAuth -->|Không| ShowAuthPage["Hiện trang Auth"]
+    HasTokenAuth -->|Có + valid + spaceId| RedirectDashboard1["→ /dashboard"]
+    HasTokenAuth -->|Có + valid + no space| RedirectSpace1["→ /space"]
+
+    CheckPath -->|/onboarding| HasTokenLanding{Có token + spaceId?}
+    HasTokenLanding -->|Có| RedirectDashboard2["→ /dashboard"]
+    HasTokenLanding -->|Không| ShowLanding["Hiện onboarding"]
+
+    CheckPath -->|Protected routes<br>/dashboard, /space...| HasTokenProtected{Có token?}
+    HasTokenProtected -->|Không| RedirectLogin["→ /login"]
+    HasTokenProtected -->|Có| CheckExp{Token hết hạn?}
+    CheckExp -->|Hết hạn| DeleteCookieLogin["Xóa cookie → /login"]
+    CheckExp -->|Còn hạn| CheckSpaceProtected{Có spaceId?}
+    CheckSpaceProtected -->|Có + vào /space| RedirectDash3["→ /dashboard"]
+    CheckSpaceProtected -->|Không + vào route khác| RedirectSpace2["→ /space"]
+    CheckSpaceProtected -->|OK| PassThrough["Cho phép truy cập"]
+```
+
+#### Code minh họa — Middleware
+
+```typescript
+export function middleware(req: NextRequest) {
+  const token = req.cookies.get("token")?.value;
+
+  // Protected routes — phải có token
+  if (!token) {
+    return NextResponse.redirect(new URL("/login", req.url));
+  }
+
+  const payload = jwtDecode<any>(token);
+
+  // Token hết hạn → xóa cookie, về login
+  if (payload.exp * 1000 < Date.now()) {
+    const res = NextResponse.redirect(new URL("/login", req.url));
+    res.cookies.delete("token");
+    return res;
+  }
+
+  // Có spaceId mà vào /space → redirect dashboard
+  if (payload.spaceId && isSpaceSetup)
+    return NextResponse.redirect(new URL("/dashboard", req.url));
+
+  // Chưa có spaceId mà vào dashboard → redirect /space
+  if (!payload.spaceId && !isSpaceSetup)
+    return NextResponse.redirect(new URL("/space", req.url));
+}
+```
+
+---
+
+## 4. Luồng Tạo "Không Gian" (Space Creation)
+
+### 4.1. Tổng quan
+
+**Space** (Phòng / Không gian) là đơn vị tổ chức chính của dự án. Mỗi Space đại diện cho **một gia đình**, và mỗi User chỉ thuộc về **một Space duy nhất**.
+
+| Vai trò   | Quyền hạn                                                 |
+| --------- | ---------------------------------------------------------- |
+| `parent`  | Toàn quyền: tạo/xóa thành viên, đổi role, sửa thông tin  |
+| `member`  | Chỉ xem và thêm giao dịch cá nhân                         |
+
+### 4.2. Schema — Model quản lý Space
+
+> File: `family-finance-be/src/Module/space/schema/space.schema.ts`
+
+```typescript
+@Schema({ timestamps: true, collection: 'spaces' })
+export class Space {
+  @Prop({ required: true, trim: true })
+  name: string;                              // Tên phòng
+
+  @Prop({ type: [Types.ObjectId], ref: 'User', default: [] })
+  membersId: Types.ObjectId[];               // Danh sách thành viên
+
+  @Prop({ required: true, unique: true, uppercase: true })
+  invitedCode: string;                       // Mã mời 6 ký tự
+
+  @Prop({ type: [Number], default: [80, 100] })
+  alertThresholds: number[];                 // Ngưỡng cảnh báo chi tiêu (%)
+
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
+  createdBy: Types.ObjectId;                 // Người tạo phòng
+}
+```
+
+### 4.3. Luồng tạo Space (Create Space)
+
+```mermaid
+sequenceDiagram
+    actor U as Người dùng
+    participant FE as SpaceSetupPage
+    participant ZS as Zustand Store
+    participant SA as Server Action
+    participant BE as SpaceController
+    participant SS as SpaceService
+    participant DB as MongoDB
+    participant JWT as JwtService
+
+    U->>FE: Nhập tên phòng, bấm "Tạo ngay"
+    FE->>SA: createSpaceAction(name)
+    SA->>SA: getToken() — lấy token từ cookie
+
+    SA->>BE: POST /api/space/create<br/>Header: Authorization Bearer {token}
+    Note over BE: JwtAuthGuard xác thực token<br/>→ req.user = {_id, accountId, username, spaceId, role}
+
+    BE->>SS: createSpace(dto, userId, accountId, email)
+
+    SS->>DB: userModel.findById(userId)
+    Note over SS: Kiểm tra user đã thuộc phòng chưa?
+    alt Đã có spaceId
+        SS-->>FE: ❌ "Bạn đã thuộc 1 phòng rồi"
+    end
+
+    SS->>SS: generateUniqueInviteCode()
+    Note right of SS: Sinh mã 6 ký tự<br/>từ A-Z + 2-9<br/>(loại bỏ ký tự dễ nhầm)
+    SS->>DB: Kiểm tra mã trùng → lặp lại nếu trùng
+
+    SS->>DB: spaceModel.create({name, membersId: [userId], invitedCode, createdBy: userId})
+    SS->>DB: userModel.updateOne({_id: userId}, {spaceId: space._id, role: 'parent'})
+
+    Note over SS,JWT: Ký JWT MỚI có spaceId + role
+
+    SS->>JWT: signAsync({sub: userId, accountId, username, spaceId, role: 'parent'})
+    JWT-->>SS: access_token mới
+
+    SS-->>SA: {_id, name, inviteCode, role, access_token, user}
+
+    Note over SA: Set cookie mới (JWT có spaceId)
+    SA->>SA: setTokenCookie(access_token)
+
+    SA-->>FE: Trả response
+    FE->>ZS: setAuth(user, access_token)
+    FE->>FE: router.push('/dashboard')
+```
+
+#### Code minh họa — Tạo Space (Backend)
+
+> File: `family-finance-be/src/Module/space/space.service.ts`
+
+```typescript
+async createSpace(dto: CreateSpaceDto, userId: string, accountId: string, email: string) {
+  // 1. Kiểm tra user chưa thuộc phòng nào
+  const user = await this.userModel.findById(userId);
+  if (user.spaceId) throw new BadRequestException('Bạn đã thuộc 1 phòng rồi');
+
+  // 2. Sinh mã mời không trùng
+  const invitedCode = await this.generateUniqueInviteCode();
+
+  // 3. Tạo Space
+  const space = await this.spaceModel.create({
+    name: dto.name,
+    membersId: [new Types.ObjectId(userId)],
+    invitedCode,
+    alertThresholds: dto.alertThresholds ?? [80, 100],
+    createdBy: new Types.ObjectId(userId),
+  });
+
+  // 4. Gán user vào Space với role = parent
+  await this.userModel.updateOne(
+    { _id: userId },
+    { spaceId: space._id, role: 'parent' },
+  );
+
+  // 5. Ký JWT mới — có spaceId + role
+  const access_token = await this.signNewToken({
+    sub: userId, accountId, username: email,
+    spaceId: space._id.toString(), role: 'parent',
+  });
+
+  return { _id: space._id, name: space.name, inviteCode: invitedCode, role: 'parent', access_token, user: {...} };
+}
+```
+
+### 4.4. Luồng vào phòng bằng mã mời (Join Space)
+
+```mermaid
+sequenceDiagram
+    actor U as Người dùng
+    participant FE as SpaceSetupPage
+    participant SA as Server Action
+    participant SS as SpaceService
+    participant DB as MongoDB
+
+    U->>FE: Nhập mã mời 6 ký tự
+    FE->>SA: joinSpaceAction(invitedCode)
+    SA->>SS: joinSpace(dto, userId, accountId, email)
+
+    SS->>DB: userModel.findById(userId)
+    SS->>SS: Kiểm tra đã có spaceId?
+
+    SS->>DB: spaceModel.findOne({invitedCode: dto.invitedCode.toUpperCase()})
+    alt Mã mời không tồn tại
+        SS-->>FE: ❌ "Mã mời không hợp lệ"
+    end
+
+    SS->>DB: spaceModel.updateOne → $addToSet: membersId
+    SS->>DB: userModel.updateOne → spaceId + role = 'member'
+    SS->>SS: signNewToken({...spaceId, role: 'member'})
+    SS-->>SA: {access_token mới, user mới}
+
+    SA->>SA: setTokenCookie(access_token)
+    SA-->>FE: Response
+    FE->>FE: setAuth() → router.push('/dashboard')
+```
+
+> **Điểm quan trọng:** Cả `createSpace` và `joinSpace` đều **trả về JWT mới** chứa `spaceId` + `role`. Frontend nhận JWT mới → set cookie → cập nhật Zustand store → middleware sẽ cho phép truy cập `/dashboard` mà **không cần đăng nhập lại**.
+
+### 4.5. Quản lý thành viên trong Space
+
+| API Endpoint                          | Method | Quyền    | Mô tả                     |
+| ------------------------------------- | ------ | -------- | -------------------------- |
+| `/api/space/me`                       | GET    | Mọi user | Lấy thông tin phòng hiện tại |
+| `/api/space/me/members/:memberId/role`| PATCH  | parent   | Đổi role thành viên         |
+| `/api/space/me/members/:memberId`     | DELETE | parent   | Xóa thành viên khỏi phòng   |
+
+---
+
+## 5. Tổng Hợp API Endpoints
+
+### Auth Module (`/api/auths`)
+
+| Endpoint              | Method | Auth   | Mô tả                          |
+| --------------------- | ------ | ------ | ------------------------------- |
+| `/api/auths/register` | POST   | Public | Đăng ký tài khoản               |
+| `/api/auths/login`    | POST   | Public | Đăng nhập (trả JWT)             |
+| `/api/auths/verify-account` | POST | Public | Kích hoạt bằng mã 6 số    |
+| `/api/auths/resend-code`    | POST | Public | Gửi lại mã kích hoạt       |
+
+### Users Module (`/api/users`)
+
+| Endpoint                | Method | Auth     | Mô tả                     |
+| ----------------------- | ------ | -------- | -------------------------- |
+| `/api/users`            | POST   | JWT      | Admin tạo user              |
+| `/api/users`            | GET    | JWT      | Lấy danh sách users         |
+| `/api/users/me`         | GET    | JWT      | Xem profile bản thân        |
+| `/api/users/me`         | PATCH  | JWT      | Cập nhật profile (name, avatar) |
+| `/api/users/me/password`| PATCH  | JWT      | Đổi mật khẩu               |
+| `/api/users/:id`        | DELETE | JWT      | Xóa user + account          |
+
+### Space Module (`/api/space`)
+
+| Endpoint                                 | Method | Auth | Mô tả                 |
+| ---------------------------------------- | ------ | ---- | ---------------------- |
+| `/api/space/create`                      | POST   | JWT  | Tạo phòng mới          |
+| `/api/space/join`                        | POST   | JWT  | Vào phòng bằng mã mời  |
+| `/api/space/me`                          | GET    | JWT  | Lấy thông tin phòng     |
+| `/api/space/me/members/:memberId/role`   | PATCH  | JWT  | Đổi role thành viên     |
+| `/api/space/me/members/:memberId`        | DELETE | JWT  | Xóa thành viên          |
+
+---
+
+> 📝 **Tài liệu này được tạo tự động** dựa trên phân tích mã nguồn thực tế của dự án.
+> Cập nhật lần cuối: **22/03/2026**

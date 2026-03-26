@@ -6,6 +6,7 @@ const AUTH_ROUTES = ["/login", "/register", "/verify", "/change-password"];
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const token = req.cookies.get("token")?.value;
+  const SPACE_SETUP_ROUTES = ["/space"];
 
   // 1. Phân loại các route
   const isAuthPage = AUTH_ROUTES.some((r) => pathname.startsWith(r));
@@ -28,7 +29,7 @@ export function middleware(req: NextRequest) {
           if (payload.spaceId) {
             return NextResponse.redirect(new URL("/dashboard", req.url));
           } else {
-            return NextResponse.redirect(new URL("/onboarding", req.url));
+            return NextResponse.redirect(new URL("/space", req.url));
           }
         }
       } catch {}
@@ -65,11 +66,31 @@ export function middleware(req: NextRequest) {
       return res;
     }
 
-    // Đã đăng nhập nhưng chưa có phòng (space) -> điều hướng đi tạo phòng
-    // Ở đây tạm dẫn về onboarding, tuỳ thiết kế có thể chuyển tới /create-space
-    if (!payload.spaceId && pathname !== "/onboarding") {
-      return NextResponse.redirect(new URL("/onboarding", req.url));
+    const isAdminRoute = pathname.startsWith('/admin');
+
+    // NẾU LÀ ADMIN, ÉP VÀO TRANG ADMIN VÀ THOÁT RA
+    if (payload.sysRole === 'admin') {
+      if (!isAdminRoute) {
+         return NextResponse.redirect(new URL("/admin", req.url));
+      }
+      return NextResponse.next();
     }
+    
+    // NẾU LÀ USER BÌNH THƯỜNG NHƯNG VÀO TRANG ADMIN => ĐẨY RA NGOÀI
+    if (isAdminRoute && payload.sysRole !== 'admin') {
+      if (payload.spaceId) return NextResponse.redirect(new URL("/dashboard", req.url));
+      return NextResponse.redirect(new URL("/space", req.url));
+    }
+
+    const isSpaceSetup = SPACE_SETUP_ROUTES.some((r) => pathname.startsWith(r));
+
+    // Đã có spaceId mà vào space-setup → dashboard
+    if (payload.spaceId && isSpaceSetup)
+      return NextResponse.redirect(new URL("/dashboard", req.url));
+
+    // Chưa có spaceId mà vào trang khác → space-setup
+    if (!payload.spaceId && !isSpaceSetup)
+      return NextResponse.redirect(new URL("/space", req.url));
 
   } catch {
     // Lỗi token (bị sửa bậy, v.v...)

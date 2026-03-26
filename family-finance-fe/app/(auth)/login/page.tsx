@@ -31,7 +31,7 @@ const LoginPage = () => {
       return;
     }
     setError("");
-    setLoading(true); 
+    setLoading(true);
     try {
       const res = await loginAction(email.trim().toLowerCase(), password);
 
@@ -41,15 +41,15 @@ const LoginPage = () => {
       }
       // Lưu vào Zustand store
       setAuth(res.user!, res.access_token);
-      // Redirect dựa trên spaceId
-      router.push(res.user?.spaceId ? "/dashboard" : "/onboarding");
+      // Redirect Admin vs User
+      router.push(res.user?.sysRole === 'admin' ? '/admin' : res.user?.spaceId ? "/dashboard" : "/space");
       router.refresh();
     } catch {
       setError("Không thể kết nối tới server. Thử lại sau.");
     } finally {
       setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-[#f6f8f7] dark:bg-[#0f1a14] flex items-center justify-center p-4">
@@ -145,7 +145,7 @@ const LoginPage = () => {
       </div>
     </div>
   );
-}
+};
 
 const LeftHero = () => {
   return (
@@ -233,5 +233,5 @@ const LeftHero = () => {
       </div>
     </div>
   );
-}
+};
 export default LoginPage;

@@ -23,10 +23,7 @@ export class AuthsService {
     private jwtService: JwtService,
   ) {}
 
-  // ── Dùng với Passport Local Strategy ──────────────────
-  // Bước 1: tìm Account theo email
-  // Bước 2: so sánh password với passwordHash
-  // Bước 3: trả về fullProfile (Account + User gộp lại)
+  //  Dùng với Passport Local Strategy
   async validateUser(email: string, pass: string): Promise<any> {
     const account = await this.usersService.findAccountByEmail(email);
     if (!account) return null;
@@ -38,13 +35,13 @@ export class AuthsService {
     return this.usersService.getFullProfile(account._id);
   }
 
-  // ── Đăng nhập ─────────────────────────────────────────
-  // SỬA: thêm accountId + spaceId + role vào JWT payload
+  //  Đăng nhập
   async login(profile: any) {
     const payload = {
       sub: profile._id, // User._id
       accountId: profile.accountId, // Account._id
       username: profile.email,
+      sysRole: profile.sysRole,
       spaceId: profile.spaceId ?? null,
       role: profile.role ?? null,
     };
@@ -57,19 +54,20 @@ export class AuthsService {
         name: profile.name,
         email: profile.email,
         avatar: profile.avatar,
+        sysRole: profile.sysRole,
         spaceId: profile.spaceId ?? null,
         role: profile.role ?? null,
       },
     };
   }
 
-  // ── Đăng ký ───────────────────────────────────────────
+  //  Đăng ký
   // Delegate xuống UsersService
   async handleRegister(dto: CreateAuthDto) {
     return this.usersService.handleRegister(dto);
   }
 
-  // ── Kích hoạt tài khoản ───────────────────────────────
+  //  Kích hoạt tài khoản
   // THÊM MỚI: user nhập email + code 6 số nhận từ email
   async verifyAccount(dto: VerifyAccountDto) {
     const account = await this.accountModel.findOne({
@@ -96,7 +94,7 @@ export class AuthsService {
     return { message: 'Kích hoạt tài khoản thành công. Bạn có thể đăng nhập.' };
   }
 
-  // ── Gửi lại mã kích hoạt ─────────────────────────────
+  //  Gửi lại mã kích hoạt
   // THÊM MỚI
   async resendVerifyCode(dto: ResendCodeDto) {
     return this.usersService.resendVerifyCode(dto.email);

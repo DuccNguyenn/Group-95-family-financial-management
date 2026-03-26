@@ -18,6 +18,7 @@ interface IUser {
   avatar: string | null;
   spaceId: string | null;
   role: "parent" | "member" | null;
+  sysRole: "admin" | "user";
   accountId: string;
 }
 

@@ -13,6 +13,7 @@ import { MailerModule } from '@nestjs-modules/mailer';
 import { HandlebarsAdapter } from '@nestjs-modules/mailer/dist/adapters/handlebars.adapter';
 import { JwtAuthGuard } from '@/Module/auths/passport/jwt-auth.guard';
 import { APP_GUARD } from '@nestjs/core';
+import { CategorisModule } from '@/Module/categoris/categoris.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { APP_GUARD } from '@nestjs/core';
     }),
     AuthsModule,
     AccountModule,
+    CategorisModule,
   ],
   controllers: [AppController],
   providers: [

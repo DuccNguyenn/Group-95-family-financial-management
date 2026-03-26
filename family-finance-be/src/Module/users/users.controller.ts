@@ -18,6 +18,7 @@ import {
   UpdateProfileDto,
   UpdateUserDto,
 } from '@/Module/users/dto/update-user.dto';
+import { AdminGuard } from '@/guards/admin.guard';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard)
@@ -26,6 +27,7 @@ export class UsersController {
 
   // ── Admin tạo user ────────────────────────────────────
   @Post()
+  @UseGuards(AdminGuard)
   create(@Body() dto: CreateUserDto) {
     return this.usersService.create(dto);
   }
@@ -33,6 +35,7 @@ export class UsersController {
   // ── Lấy tất cả users (Admin) ──────────────────────────
   // SỬA: bỏ @Public() — phải đăng nhập mới xem được
   @Get()
+  @UseGuards(AdminGuard)
   findAll(
     @Query() query: string,
     @Query('current') current: number,
@@ -70,12 +73,14 @@ export class UsersController {
 
   // ── Admin cập nhật user bất kỳ ───────────────────────
   @Patch()
+  @UseGuards(AdminGuard)
   update(@Body() dto: UpdateUserDto) {
     return this.usersService.update(dto);
   }
 
   // ── Xóa user + account ────────────────────────────────
   @Delete(':id')
+  @UseGuards(AdminGuard)
   remove(@Param('id') id: string) {
     return this.usersService.remove(id);
   }
