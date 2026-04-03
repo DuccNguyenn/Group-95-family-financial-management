@@ -1,14 +1,17 @@
-import { Prop, Schema } from '@nestjs/mongoose';
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
 
 export type IncomeDocument = HydratedDocument<Incomes>;
 
 @Schema({ timestamps: true, collection: 'incomes' })
 export class Incomes {
-  @Prop({ type: Types.ObjectId, ref: 'Users', required: true })
+  @Prop({ type: Types.ObjectId, ref: 'Spaces', required: true })
+  spaceID: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   userID: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Categories', required: true })
+  @Prop({ type: Types.ObjectId, ref: 'Categoris', required: true })
   categoryID: Types.ObjectId;
 
   @Prop({ required: true })
@@ -19,4 +22,9 @@ export class Incomes {
 
   @Prop({ required: true })
   description: string;
+
+  createdAt: Date;
+  updatedAt: Date;
 }
+
+export const IncomesSchema = SchemaFactory.createForClass(Incomes);

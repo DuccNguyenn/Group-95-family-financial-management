@@ -14,6 +14,7 @@ import { HandlebarsAdapter } from '@nestjs-modules/mailer/dist/adapters/handleba
 import { JwtAuthGuard } from '@/Module/auths/passport/jwt-auth.guard';
 import { APP_GUARD } from '@nestjs/core';
 import { CategorisModule } from '@/Module/categoris/categoris.module';
+import { IncomesModule } from '@/Module/incomes/incomes.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { CategorisModule } from '@/Module/categoris/categoris.module';
     AuthsModule,
     AccountModule,
     CategorisModule,
+    IncomesModule,
   ],
   controllers: [AppController],
   providers: [

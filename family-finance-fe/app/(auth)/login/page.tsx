@@ -42,7 +42,13 @@ const LoginPage = () => {
       // Lưu vào Zustand store
       setAuth(res.user!, res.access_token);
       // Redirect Admin vs User
-      router.push(res.user?.sysRole === 'admin' ? '/admin' : res.user?.spaceId ? "/dashboard" : "/space");
+      router.push(
+        res.user?.sysRole === "admin"
+          ? "/admin"
+          : res.user?.spaceId
+            ? "/dashboard"
+            : "/space",
+      );
       router.refresh();
     } catch {
       setError("Không thể kết nối tới server. Thử lại sau.");
