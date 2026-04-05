@@ -92,6 +92,28 @@ export class IncomesService {
   }
 
   //GET/incomes/id (Nguyên)
+  async getIncomeById(id: string, spaceID: string, role: string, userID: string) {
+    const filter: any = {
+      _id: new Types.ObjectId(id),
+      spaceID: new Types.ObjectId(spaceID),
+    };
+
+    if (role === 'member') {
+      filter.userID = new Types.ObjectId(userID);
+    }
+
+    const income = await this.incomesModel
+      .findOne(filter)
+      .populate('categoryID', 'name icon color')
+      .populate('userID', 'name avatar')
+      .lean();
+
+    if (!income) {
+      throw new BadRequestException('Income not found or access denied');
+    }
+
+    return income;
+  }
 
   update(id: number, updateIncomeDto: UpdateIncomeDto) {
     return `This action updates a #${id} income`;

@@ -44,4 +44,14 @@ export class IncomesController {
   ) {
     return this.incomesService.getIncomes(query, userId, spaceId, role);
   }
+
+  @Get(':id')
+  findOne(
+    @Param('id') id: string,
+    @GetUser('_id') userId: string,
+    @GetUser('spaceId') spaceId: string,
+    @GetUser('role') role: string,
+  ) {
+    return this.incomesService.getIncomeById(id, spaceId, role, userId);
+  }
 }
